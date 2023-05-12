@@ -6,7 +6,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { AntDesign } from "@expo/vector-icons";
 import { SimpleLineIcons } from "@expo/vector-icons";
 
-import MapScreen from "../screens/MapScreen";
+import { MapScreen } from "../screens/MapScreen";
 import FavouriteScreen from "../screens/FavouriteScreen";
 import BookingsScreen from "../screens/BookingsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
@@ -101,7 +101,7 @@ function MyTabBar({ state, descriptors, navigation }) {
   );
 }
 
-export default function NavBar() {
+export function NavBar() {
   return (
     <Tab.Navigator
       initialRouteName="map"

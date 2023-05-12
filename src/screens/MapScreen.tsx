@@ -1,110 +1,118 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { StatusBar } from 'expo-status-bar';
-import { Button, Dimensions, StyleSheet, Text, View } from 'react-native';
-import MapView, { LatLng, Region } from 'react-native-maps';
-
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useQuery } from "@tanstack/react-query";
+import { StatusBar } from "expo-status-bar";
+import { useEffect, useRef, useState } from "react";
+import { Modal, StyleSheet, TouchableHighlight, View } from "react-native";
+import MapView, { Marker } from "react-native-maps";
+import SvgMarkerGreen from "../../components/icons/MarkerGreen";
+import SvgMarkerWhite from "../../components/icons/MarkerWhite";
+import SvgMarkerYellow from "../../components/icons/MarkerYellow";
+import { MapPointModal } from "../../components/MapPointModal";
 import * as Location from 'expo-location';
 
-import {
-  QueryClient,
-  QueryClientProvider,
-  useQuery,
-} from '@tanstack/react-query'
-
-
-import {Icon } from 'react-native-elements';
-
-import MyHeader from '../components/Header'
-
 function useLocation() {
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
-  const [errorMsg, setErrorMsg] = useState(null);
+  const [isGranted, setIsGranted] = useState(false);
+
+  async function requestPermissions() {
+    const { granted, canAskAgain } = await Location.requestForegroundPermissionsAsync();
+    setIsGranted(granted);
+  }
 
   useEffect(() => {
-    (async () => {
-
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setErrorMsg('Permission to access location was denied');
-        return;
-      }
-
-      let location = await Location.getCurrentPositionAsync({});
-      setLocation(location);
-    })();
+    requestPermissions()
   }, []);
 
-  const isError = errorMsg !== null;
-  return { location, errorMsg, isError };
+  return { isGranted, requestPermissions };
 }
 
-type MapBox = {
-  l: number,
-  b: number,
-  r: number,
-  t: number,
+type MapMarkers = {
+  id: number,
+  latitude: number,
+  longitude: number,
+  color: "GREEN" | "YELLOW" | "WHITE"
+}[];
+function useMapMarkers() {
+  return useQuery<MapMarkers>({
+    queryKey: ['useMapMarkers'],
+    queryFn: () => fetch('http://10.178.130.105:3001/api/v1/mapPoints')
+      .then(a => a.json())
+  })
 }
 
-
-async function fetchChargingStations({ l, b, r, t }: MapBox) {
-  const bbox = `${l},${b},${t},${r}`;
-  const resp = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    body: `
-        [out:json][timeout:25];
-        (
-         node["amenity"="charging_station"](${bbox});
-         way["amenity"="charging_station"](${bbox});
-         relation["amenity"="charging_station"](${bbox});
-        );
-        out body;
-      `})
-  const response = await resp.json();
-  console.log('response', response);
-}
-
-function regionToMapBox(region: Region): MapBox {
-  return {
-    l: region.longitude,
-    r: region.longitude + region.longitudeDelta,
-    b: region.latitude,
-    t: region.latitude + region.latitudeDelta,
-  }
-}
-
-function Screen() {
-  const q = useQuery({
-    queryKey: ['map',]
-  });
+export function MapScreen() {
+  const { isGranted } = useLocation();
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [selectedMarkerId, setSelectedMarkerId] = useState<number | null>(null);
+  const { isSuccess, data: mapMarkers } = useMapMarkers();
+  const mapRef = useRef<MapView>(null);
 
   return (
     <View style={styles.container}>
       <MapView
+        ref={mapRef}
         style={styles.map}
         showsIndoors={false}
         showsPointsOfInterest={false}
-        followsUserLocation
+        showsMyLocationButton={false}
         showsUserLocation
-        onRegionChangeComplete={async (region) => {
-          fetchChargingStations(regionToMapBox(region));
+        onUserLocationChange={e => {
+          if (userLocation === null) {
+            mapRef.current.animateToRegion({
+              ...e.nativeEvent.coordinate,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            })
+          }
+          setUserLocation(e.nativeEvent.coordinate)
         }}
       >
-    </MapView>
-    <StatusBar style="auto" />
-    </View>
+        {isSuccess && mapMarkers.map(mapMarker => (
+          <Marker
+            onPress={() => {
+              setSelectedMarkerId(mapMarker.id)
+              setTimeout(() => setIsModalVisible(true), 300)
+            }}
+            key={mapMarker.id}
+            coordinate={{
+              latitude: mapMarker.latitude,
+              longitude: mapMarker.longitude
+            }}
+          >
+            {mapMarker.color === "YELLOW" && <SvgMarkerYellow />}
+            {mapMarker.color === "WHITE" && <SvgMarkerWhite />}
+            {mapMarker.color === "GREEN" && <SvgMarkerGreen />}
+          </Marker>
+        ))}
+      </MapView>
+      <View style={{ position: 'absolute', bottom: 72, right: 16 }}>
+        <TouchableHighlight
+          onPress={() => {
+            mapRef.current.animateToRegion({
+              ...userLocation,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            })
+          }}
+          activeOpacity={0.8}
+          style={styles.locationButton}>
+          <FontAwesome size={40} color='#FFCF26' name={isGranted ? "location-arrow" : 'close'} />
+        </TouchableHighlight>
+      </View>
+      <Modal
+        transparent
+        animationType='slide'
+        visible={isModalVisible}
+        onRequestClose={() => {
+          setIsModalVisible(false)
+        }}
+      >
+        <MapPointModal pointId={selectedMarkerId} />
+      </Modal >
+      <StatusBar style="auto" />
+    </View >
   );
 }
-
-const queryClient = new QueryClient();
-
-export default function MapScreen() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <Screen />
-    </QueryClientProvider>
-  )
-}
-
 
 const styles = StyleSheet.create({
   container: {
@@ -112,11 +120,7 @@ const styles = StyleSheet.create({
   },
   map: {
     width: '100%',
-    height: '100%',
+    height: '125%',
   },
-  button: {
-    position: 'absolute',
-    top: 0,
-    zIndex: 1000
-  },
+  locationButton: { borderRadius: 1000, width: 72, height: 72, backgroundColor: '#111C35', justifyContent: 'center', alignItems: 'center' }
 });

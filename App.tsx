@@ -1,19 +1,14 @@
-import * as React from "react";
-import { StyleSheet, View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { NavBar } from "./src/components/NavBar";
 
-import NavBar from "./src/components/NavBar";
-
+const queryClient = new QueryClient();
 export default function App() {
   return (
-    <NavigationContainer>
-      <NavBar />
-    </NavigationContainer>
+    <QueryClientProvider client={queryClient}>
+      <NavigationContainer>
+        <NavBar />
+      </NavigationContainer>
+    </QueryClientProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: "#111C35",
-  },
-});
